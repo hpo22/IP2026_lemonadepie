@@ -3,6 +3,7 @@ using UnityEngine.SceneManagement;
 using TMPro;
 using Firebase;
 using Firebase.Auth;
+using Firebase.Database;
 using System.Threading.Tasks;
 
 public class SignUpManager : MonoBehaviour
@@ -16,6 +17,7 @@ public class SignUpManager : MonoBehaviour
     public string loginSceneName = "user_login";
 
     private FirebaseAuth auth;
+    private DatabaseReference dbRoot;
     private bool isBusy = false;
 
     private async void Awake()
@@ -28,6 +30,7 @@ public class SignUpManager : MonoBehaviour
             return;
         }
         auth = FirebaseAuth.DefaultInstance;
+        dbRoot = FirebaseDatabase.DefaultInstance.RootReference;
     }
 
     // Call this from your Poke/Select event
@@ -51,7 +54,14 @@ public class SignUpManager : MonoBehaviour
 
         try
         {
-            await auth.CreateUserWithEmailAndPasswordAsync(email, password);
+            var result = await auth.CreateUserWithEmailAndPasswordAsync(email, password);
+
+            // Save email to database under user_data
+            if (result != null && result.User != null)
+            {
+                string userId = result.User.UserId;
+                await SaveUserEmail(userId, email);
+            }
 
             // optional: store email to autofill login
             PlayerPrefs.SetString("LAST_EMAIL", email);
@@ -67,6 +77,20 @@ public class SignUpManager : MonoBehaviour
         finally
         {
             isBusy = false;
+        }
+    }
+
+    private async Task SaveUserEmail(string userId, string email)
+    {
+        try
+        {
+            var userDataRef = dbRoot.Child("users").Child(userId).Child("user_data");
+            await userDataRef.Child("email").SetValueAsync(email);
+            Debug.Log($"Saved email for user {userId} to database");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"Failed to save email to database: {e.Message}");
         }
     }
 }
